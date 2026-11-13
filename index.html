@@ -38,7 +38,12 @@ const P0=[
 const K='wk1';let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 S=S||{prog:P0,ses:[],bk:0};
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
-const $=s=>document.querySelector(s);let day=null,tab='today',ti;
+const $=s=>document.querySelector(s);let day=null,tab='today';
+let DR={};try{DR=JSON.parse(localStorage.getItem('wk1d'))||{}}catch(e){}
+const dv=(k,d)=>(DR[day]&&DR[day][k]!=null)?DR[day][k]:d;
+const sdr=()=>{try{localStorage.setItem('wk1d',JSON.stringify(DR))}catch(e){}};
+document.addEventListener('input',e=>{const t=e.target;if(/^[wr]\d/.test(t.id)){(DR[day]=DR[day]||{})[t.id]=t.value;sdr()}});
+const setv=(id,v)=>{const el=$('#'+id);if(el){el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}))}};
 const last=n=>{for(let i=S.ses.length-1;i>=0;i--)if(S.ses[i].ex[n])return S.ses[i].ex[n]};
 const hit=(e,x)=>x&&e.t.every((r,i)=>(x.r[i]||0)>=r);
 function nextDay(){const l=S.ses[S.ses.length-1],ids=S.prog.map(d=>d.id);return l?ids[(ids.indexOf(l.day)+1)%ids.length]:ids[0]}
@@ -50,25 +55,39 @@ function today(){
  return `<div class=card><b>${e.n}</b> <span class=m>${e.lab||e.t.join(',')}${e.u&&!bw?', '+e.u:''}</span>
  ${l?`<div class=m>В прошлый раз: ${bw?'':l.w+(e.u=='×2'?'×2':'')+' кг × '}${l.r.join(',')}</div>`:''}
  ${hit(e,l)?'<div class=up>Цель закрыта: поднимай вес</div>':''}
- <div class=row>${bw?`<input id=w${i} type=hidden value=0>`:`<input id=w${i} type=number inputmode=decimal step=0.5 value="${w}">`}
- ${e.t.map((r,j)=>`<input id=r${i}_${j} type=number inputmode=numeric placeholder="${r}">`).join('')}</div></div>`}).join('')
+ <div class=row>${bw?`<input id=w${i} type=hidden value=0>`:`<input id=w${i} type=number inputmode=decimal step=0.5 value="${dv('w'+i,w)}">`}
+ ${e.t.map((r,j)=>`<input id=r${i}_${j} type=number inputmode=numeric placeholder="${r}" value="${dv('r'+i+'_'+j,'')}">`).join('')}</div></div>`}).join('')
  +`<button class=big onclick=fin()>Сохранить тренировку</button>
- <div class=card>Отдых: <button onclick=tm(90)>90 с</button><button onclick=tm(120)>2 мин</button><button onclick=tm(180)>3 мин</button> <b id=tm></b></div>
+ <div class=card>Отдых: <button onclick=tm(90)>90 с</button><button onclick=tm(120)>2 мин</button><button onclick=tm(180)>3 мин</button><button onclick=tstop()>Стоп</button> <b id=tm></b></div>
  <details class=card><summary>Вставить результаты текстом</summary><textarea id=txt rows=6 placeholder="Гоблет-присед 24: 12,12,11"></textarea><button onclick=parse()>Разобрать в поля</button></details>`}
 function fin(){const d=S.prog.find(x=>x.id==day),ex={};
  d.ex.forEach((e,i)=>{const r=e.t.map((_,j)=>+$(`#r${i}_${j}`).value||0);if(r.some(v=>v))ex[e.n]={w:+$(`#w${i}`).value||0,r}});
  if(!Object.keys(ex).length)return alert('Заполни хотя бы одно упражнение');
- S.ses.push({d:new Date().toISOString().slice(0,10),day,ex});save();day=null;tab='hist';draw()}
+ S.ses.push({d:new Date().toISOString().slice(0,10),day,ex});save();delete DR[day];sdr();day=null;tab='hist';draw()}
 const nm=s=>s.toLowerCase().replace(/ё/g,'е').replace(/гоу/g,'го');
 const cp=(a,b)=>{let i=0;while(i<a.length&&a[i]==b[i])i++;return i};
 function parse(){const d=S.prog.find(x=>x.id==day);let n=0;
  $('#txt').value.split('\n').forEach(L=>{
  const m=L.match(/^(.*?)\s*(\d+(?:[.,]\d+)?)\s*(?:кг)?\s*(?:[×x*]\s*2)?\s*[:\-–]\s*([\d,\s]+)/i);if(!m)return;
  let bi=-1,bs=3;d.ex.forEach((e,i)=>{const s=cp(nm(e.n),nm(m[1]));if(s>bs){bs=s;bi=i}});if(bi<0)return;
- $(`#w${bi}`).value=m[2].replace(',','.');
- m[3].split(/[,\s]+/).filter(Boolean).forEach((v,j)=>{const el=$(`#r${bi}_${j}`);if(el)el.value=v});n++});
+ setv('w'+bi,m[2].replace(',','.'));
+ m[3].split(/[,\s]+/).filter(Boolean).forEach((v,j)=>setv(`r${bi}_${j}`,v));n++});
  alert(n?'Разобрано упражнений: '+n:'Ничего не распознал. Формат: «Название вес: 12,12,12»')}
-function tm(s){clearInterval(ti);let t=s;const u=()=>{$('#tm').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');if(t--<=0){clearInterval(ti);navigator.vibrate&&navigator.vibrate(300);$('#tm').textContent='Пора!'}};u();ti=setInterval(u,1000)}
+let tEnd=+localStorage.getItem('wk1t')||0,tI=0,wl=null,fired=false,ac;
+const setT=v=>{tEnd=v;try{localStorage.setItem('wk1t',v)}catch(e){}};
+function lock(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>{wl=l;l.addEventListener('release',()=>{wl=null})}).catch(()=>{})}catch(e){}}
+function beep(){try{if(ac){const o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);g.gain.value=.25;o.frequency.value=880;o.start();o.stop(ac.currentTime+.7)}}catch(e){}navigator.vibrate&&navigator.vibrate(300)}
+function tick(){const el=$('#tm'),n=Date.now(),r=Math.ceil((tEnd-n)/1000);
+ if(!tEnd){if(el)el.textContent='';return}
+ if(r<=0){if(!fired){fired=true;if(n-tEnd<4000)beep();try{wl&&wl.release()}catch(e){}}
+  clearInterval(tI);tI=0;if(n-tEnd>6e5){setT(0);if(el)el.textContent='';return}
+  if(el)el.textContent='Пора!';return}
+ if(el)el.textContent=Math.floor(r/60)+':'+String(r%60).padStart(2,'0')}
+function tm(s){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();ac.resume()}catch(e){}
+ setT(Date.now()+s*1000);fired=false;clearInterval(tI);tI=setInterval(tick,500);tick();lock()}
+function tstop(){setT(0);clearInterval(tI);tI=0;tick()}
+const back=()=>{tick();if(tEnd>Date.now()){if(!tI)tI=setInterval(tick,500);if(!wl)lock()}};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)back()});window.addEventListener('pageshow',back);
 function hist(){return '<h1>История</h1>'+(S.ses.slice().reverse().map(s=>`<div class=card><b>${s.d}</b> <span class=m>${(S.prog.find(x=>x.id==s.day)||{}).name||s.day}</span>${Object.entries(s.ex).map(([n,x])=>`<div class=m>${n}: ${x.w?x.w+' кг × ':''}${x.r.join(',')}</div>`).join('')}<button onclick="del(${S.ses.indexOf(s)})">Удалить</button></div>`).join('')||'<div class=card>Пока пусто. Сохрани первую тренировку.</div>')}
 function del(i){if(confirm('Удалить тренировку?')){S.ses.splice(i,1);save();draw()}}
 function data(){const dd=S.bk?Math.floor((Date.now()-S.bk)/864e5):null;
@@ -81,8 +100,8 @@ async function exp(){const f=new File([JSON.stringify(S,null,1)],'workouts-'+new
  S.bk=Date.now();save();draw()}
 function imp(inp){const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(!o.ses||!o.prog)throw 0;S=o;save();draw();alert('Импортировано тренировок: '+o.ses.length)}catch(e){alert('Это не файл бэкапа')}};r.readAsText(inp.files[0])}
 function sp(){try{const p=JSON.parse($('#pj').value);if(!Array.isArray(p))throw 0;S.prog=p;day=null;save();alert('Программа сохранена')}catch(e){alert('Некорректный JSON')}}
-function draw(){$('#app').innerHTML=tab=='today'?today():tab=='hist'?hist():data();document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));window.scrollTo(0,0)}
-draw();
+function draw(){$('#app').innerHTML=tab=='today'?today():tab=='hist'?hist():data();document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));window.scrollTo(0,0);tick()}
+draw();back();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 </script></body></html>
