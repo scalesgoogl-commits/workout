@@ -88,10 +88,20 @@ function aset(){try{if(navigator.audioSession)navigator.audioSession.type=SM=='m
 function smode(){SM=SM=='mix'?'loud':'mix';try{localStorage.setItem('wk1m',SM)}catch(e){}aset();draw()}
 fetch('Fight.mp3').then(r=>{if(!r.ok)throw 0;return r.blob()}).then(b=>{uF=URL.createObjectURL(b)}).catch(()=>{});
 function play(u,loop){aset();snd.loop=loop;snd.muted=false;snd.src=u;return snd.play()}
-const nmS=()=>uF?'Fight.mp3':'запасной писк (Fight.mp3 не загрузился)';
+let AC=null,AB=null;
+const actx=()=>{try{return AC=AC||new(window.AudioContext||window.webkitAudioContext)()}catch(e){return null}};
+try{fetch('Fight.mp3').then(r=>{if(!r.ok)throw 0;return r.arrayBuffer()}).then(b=>new Promise((y,n)=>{const c=actx();c?c.decodeAudioData(b,y,n):n()})).then(b=>{AB=b}).catch(()=>{})}catch(e){}
+const nmS=()=>(SM=='mix'?AB:uF)?'Fight.mp3':'запасной писк (Fight.mp3 не загрузился)';
+function wplay(){const c=actx();if(!c)return Promise.reject('нет AudioContext');
+ if(c.state!='running')c.resume().catch(()=>{});
+ let b=AB;if(!b){b=c.createBuffer(1,Math.round(c.sampleRate*.7),c.sampleRate);const d=b.getChannelData(0);for(let k=0;k<d.length;k++)d[k]=Math.sin(2*Math.PI*880*k/c.sampleRate)*.3}
+ const x=c.createBufferSource();x.buffer=b;x.connect(c.destination);x.start(0);return Promise.resolve(c.state)}
+function unlock(){if(SM!='mix')return play(uS,false);const c=actx();if(!c)return Promise.reject('нет AudioContext');
+ const x=c.createBufferSource();x.buffer=c.createBuffer(1,1,22050);x.connect(c.destination);x.start(0);return c.resume().then(()=>c.state)}
+const fire=()=>SM=='mix'?wplay():play(uF||uB,false);
 function alarm(){navigator.vibrate&&navigator.vibrate(300);
- play(uF||uB,false).then(()=>diag('Сигнал: '+nmS())).catch(e=>{diag('Сигнал не сыграл: '+(e&&e.name||e));if(uF)play(uB,false).catch(()=>{})})}
-function tsnd(){play(uF||uB,false).then(()=>diag('Проверка: играет '+nmS()+'; audioSession: '+(navigator.audioSession?navigator.audioSession.type:'нет'))).catch(e=>diag('Проверка: ошибка '+(e&&e.name||e)))}
+ fire().then(()=>diag('Сигнал: '+nmS()+(SM=='mix'?', контекст: '+(AC&&AC.state):''))).catch(e=>diag('Сигнал не сыграл: '+(e&&e.name||e)))}
+function tsnd(){fire().then(()=>diag('Проверка: '+nmS()+'; режим: '+SM+'; audioSession: '+(navigator.audioSession?navigator.audioSession.type:'нет')+(SM=='mix'?'; контекст: '+(AC&&AC.state):''))).catch(e=>diag('Проверка: ошибка '+(e&&e.name||e)))}
 function tick(){const dg=$('#dg');if(dg)dg.textContent=DG;const el=$('#tm'),n=Date.now(),r=Math.ceil((tEnd-n)/1000);
  if(el)el.className=tEnd&&r<=0?'go':'';
  if(!tEnd){if(el)el.textContent='';return}
@@ -100,7 +110,7 @@ function tick(){const dg=$('#dg');if(dg)dg.textContent=DG;const el=$('#tm'),n=Da
   if(el)el.textContent='Пора!';return}
  if(el)el.textContent=Math.floor(r/60)+':'+String(r%60).padStart(2,'0')}
 function tm(s){setT(Date.now()+s*1000);fired=false;clearInterval(tI);tI=setInterval(tick,500);
- play(uS,false).then(()=>diag('Таймер идёт, звук разблокирован')).catch(e=>diag('Звук заблокирован: '+(e&&e.name||e)));
+ unlock().then(x=>diag('Таймер идёт, звук разблокирован'+(typeof x=='string'?' ('+x+')':''))).catch(e=>diag('Звук заблокирован: '+(e&&e.name||e)));
  tick();lock()}
 const back=()=>{tick();if(tEnd>Date.now()){if(!tI)tI=setInterval(tick,500);if(!wl)lock()}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)back()});window.addEventListener('pageshow',back);
@@ -109,7 +119,7 @@ function del(i){if(confirm('Удалить тренировку?')){S.ses.splice
 function data(){const dd=S.bk?Math.floor((Date.now()-S.bk)/864e5):null;
  return `<h1>Данные</h1><div class=card>${dd===null?'Бэкапов ещё не было':'Последний бэкап: '+dd+' дн. назад'}${dd===null||dd>14?'<div class=up>Сделай бэкап: данные живут только в этом телефоне</div>':''}
  <button class=big onclick=exp()>Экспорт (в Яндекс Диск или Файлы)</button><label class=big>Импорт<input type=file accept=".json,application/json" hidden onchange=imp(this)></label></div>
- <div class=card><b>Звук</b><div class=m>Проверка сигнала таймера</div><button onclick=smode()>Режим сигнала: ${SM=='mix'?'поверх музыки':'громкий, ставит музыку на паузу'}</button><div class=m>«Поверх музыки» не прерывает музыку, но при включённом беззвучном режиме сигнала не будет. «Громкий» играет всегда, но паузит музыку.</div><button onclick=tsnd()>Проверить звук</button><div class=m id=dg></div></div><div class=card><b>Программа (JSON)</b><div class=m>n: упражнение, w: вес, t: повторы для закрытия цели, lab: подпись, u: ×2 или тело</div><textarea id=pj rows=10>${JSON.stringify(S.prog)}</textarea><button onclick=sp()>Сохранить программу</button></div><div class=m>Версия приложения: v6</div>`}
+ <div class=card><b>Звук</b><div class=m>Проверка сигнала таймера</div><button onclick=smode()>Режим сигнала: ${SM=='mix'?'поверх музыки':'громкий, ставит музыку на паузу'}</button><div class=m>«Поверх музыки» не прерывает музыку, но при включённом беззвучном режиме сигнала не будет. «Громкий» играет всегда, но паузит музыку.</div><button onclick=tsnd()>Проверить звук</button><div class=m id=dg></div></div><div class=card><b>Программа (JSON)</b><div class=m>n: упражнение, w: вес, t: повторы для закрытия цели, lab: подпись, u: ×2 или тело</div><textarea id=pj rows=10>${JSON.stringify(S.prog)}</textarea><button onclick=sp()>Сохранить программу</button></div><div class=m>Версия приложения: v7</div>`}
 async function exp(){const f=new File([JSON.stringify(S,null,1)],'workouts-'+new Date().toISOString().slice(0,10)+'.json',{type:'application/json'});
  try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f]});else throw 0}
  catch(e){if(e&&e.name=='AbortError')return;const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click()}
