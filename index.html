@@ -17,7 +17,7 @@ button,label.big{font:inherit;border:1px solid var(--l);background:var(--c);colo
 .big{display:block;text-align:center;width:100%;background:var(--a);color:#fff;border:0;font-weight:600;margin:8px 0 0}
 .chip.on,nav button.on{background:var(--a);color:#fff;border-color:var(--a)}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--l)}
-nav button{flex:1;margin:0}h1{font-size:22px;margin:14px 0 4px}
+nav button{flex:1;margin:0}#tm{font-size:20px}#tm.go{color:var(--g)}h1{font-size:22px;margin:14px 0 4px}
 </style></head><body>
 <div id="app"></div>
 <nav><button data-t="today" onclick="tab='today';draw()">Сегодня</button><button data-t="hist" onclick="tab='hist';draw()">История</button><button data-t="data" onclick="tab='data';draw()">Данные</button></nav>
@@ -58,11 +58,12 @@ function today(){
  <div class=row>${bw?`<input id=w${i} type=hidden value=0>`:`<input id=w${i} type=number inputmode=decimal step=0.5 value="${dv('w'+i,w)}">`}
  ${e.t.map((r,j)=>`<input id=r${i}_${j} type=number inputmode=numeric placeholder="${r}" value="${dv('r'+i+'_'+j,'')}">`).join('')}</div></div>`}).join('')
  +`<button class=big onclick=fin()>Сохранить тренировку</button>
- <div class=card>Отдых: <button onclick=tm(90)>90 с</button><button onclick=tm(120)>2 мин</button><button onclick=tm(180)>3 мин</button><button onclick=tstop()>Стоп</button> <b id=tm></b></div>
+ <div class=card><b>Отдых:</b> <button onclick=tm(90)>90 с</button><button onclick=tm(120)>2 мин</button><button onclick=tm(180)>3 мин</button> <b id=tm></b></div>
  <details class=card><summary>Вставить результаты текстом</summary><textarea id=txt rows=6 placeholder="Гоблет-присед 24: 12,12,11"></textarea><button onclick=parse()>Разобрать в поля</button></details>`}
 function fin(){const d=S.prog.find(x=>x.id==day),ex={};
  d.ex.forEach((e,i)=>{const r=e.t.map((_,j)=>+$(`#r${i}_${j}`).value||0);if(r.some(v=>v))ex[e.n]={w:+$(`#w${i}`).value||0,r}});
  if(!Object.keys(ex).length)return alert('Заполни хотя бы одно упражнение');
+ if(!confirm('Вы уверены, что хотите закончить тренировку и сохранить результат?'))return;
  S.ses.push({d:new Date().toISOString().slice(0,10),day,ex});save();delete DR[day];sdr();day=null;tab='hist';draw()}
 const nm=s=>s.toLowerCase().replace(/ё/g,'е').replace(/гоу/g,'го');
 const cp=(a,b)=>{let i=0;while(i<a.length&&a[i]==b[i])i++;return i};
@@ -76,16 +77,21 @@ function parse(){const d=S.prog.find(x=>x.id==day);let n=0;
 let tEnd=+localStorage.getItem('wk1t')||0,tI=0,wl=null,fired=false,ac;
 const setT=v=>{tEnd=v;try{localStorage.setItem('wk1t',v)}catch(e){}};
 function lock(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>{wl=l;l.addEventListener('release',()=>{wl=null})}).catch(()=>{})}catch(e){}}
-function beep(){try{if(ac){const o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);g.gain.value=.25;o.frequency.value=880;o.start();o.stop(ac.currentTime+.7)}}catch(e){}navigator.vibrate&&navigator.vibrate(300)}
+function beep(){try{if(ac){ac.resume();const o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);g.gain.value=.25;o.frequency.value=880;o.start();o.stop(ac.currentTime+.7)}}catch(e){}}
+let snd=new Audio(),sndOk=false;
+try{if(navigator.audioSession)navigator.audioSession.type='playback'}catch(e){}
+fetch('Fight.mp3').then(r=>{if(!r.ok)throw 0;return r.blob()}).then(b=>{snd.src=URL.createObjectURL(b);snd.load();sndOk=true}).catch(()=>{});
+function alarm(){navigator.vibrate&&navigator.vibrate(300);if(sndOk){snd.muted=false;snd.currentTime=0;snd.play().catch(beep)}else beep()}
 function tick(){const el=$('#tm'),n=Date.now(),r=Math.ceil((tEnd-n)/1000);
+ if(el)el.className=tEnd&&r<=0?'go':'';
  if(!tEnd){if(el)el.textContent='';return}
- if(r<=0){if(!fired){fired=true;if(n-tEnd<4000)beep();try{wl&&wl.release()}catch(e){}}
+ if(r<=0){if(!fired){fired=true;if(n-tEnd<15000)alarm();try{wl&&wl.release()}catch(e){}}
   clearInterval(tI);tI=0;if(n-tEnd>6e5){setT(0);if(el)el.textContent='';return}
   if(el)el.textContent='Пора!';return}
  if(el)el.textContent=Math.floor(r/60)+':'+String(r%60).padStart(2,'0')}
 function tm(s){try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();ac.resume()}catch(e){}
+ if(sndOk){snd.muted=true;snd.play().then(()=>{snd.pause();snd.currentTime=0;snd.muted=false}).catch(()=>{snd.muted=false})}
  setT(Date.now()+s*1000);fired=false;clearInterval(tI);tI=setInterval(tick,500);tick();lock()}
-function tstop(){setT(0);clearInterval(tI);tI=0;tick()}
 const back=()=>{tick();if(tEnd>Date.now()){if(!tI)tI=setInterval(tick,500);if(!wl)lock()}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)back()});window.addEventListener('pageshow',back);
 function hist(){return '<h1>История</h1>'+(S.ses.slice().reverse().map(s=>`<div class=card><b>${s.d}</b> <span class=m>${(S.prog.find(x=>x.id==s.day)||{}).name||s.day}</span>${Object.entries(s.ex).map(([n,x])=>`<div class=m>${n}: ${x.w?x.w+' кг × ':''}${x.r.join(',')}</div>`).join('')}<button onclick="del(${S.ses.indexOf(s)})">Удалить</button></div>`).join('')||'<div class=card>Пока пусто. Сохрани первую тренировку.</div>')}
