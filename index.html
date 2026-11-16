@@ -80,10 +80,10 @@ function lock(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').the
 const wav=(f,sec)=>{const sr=8000,n=Math.round(sr*sec),b=new DataView(new ArrayBuffer(44+n*2)),w=(o,t)=>[...t].forEach((c,k)=>b.setUint8(o+k,c.charCodeAt(0)));
  w(0,'RIFF');b.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,1,true);b.setUint32(24,sr,true);b.setUint32(28,sr*2,true);b.setUint16(32,2,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*2,true);
  for(let k=0;k<n;k++)b.setInt16(44+k*2,f?Math.sin(2*Math.PI*f*k/sr)*9000:0,true);return URL.createObjectURL(new Blob([b],{type:'audio/wav'}))};
-const uS=wav(0,1),uB=wav(880,.7);let uF=null,DG='';
+const uS=wav(0,.15),uB=wav(880,.7);let uF=null,DG='';
 const snd=new Audio();snd.preload='auto';
 const diag=t=>{DG=t;const e=$('#dg');if(e)e.textContent=t};
-try{if(navigator.audioSession)navigator.audioSession.type='playback'}catch(e){}
+try{if(navigator.audioSession)navigator.audioSession.type='transient'}catch(e){}
 fetch('Fight.mp3').then(r=>{if(!r.ok)throw 0;return r.blob()}).then(b=>{uF=URL.createObjectURL(b)}).catch(()=>{});
 function play(u,loop){snd.loop=loop;snd.muted=false;snd.src=u;return snd.play()}
 const nmS=()=>uF?'Fight.mp3':'запасной писк (Fight.mp3 не загрузился)';
@@ -98,7 +98,7 @@ function tick(){const dg=$('#dg');if(dg)dg.textContent=DG;const el=$('#tm'),n=Da
   if(el)el.textContent='Пора!';return}
  if(el)el.textContent=Math.floor(r/60)+':'+String(r%60).padStart(2,'0')}
 function tm(s){setT(Date.now()+s*1000);fired=false;clearInterval(tI);tI=setInterval(tick,500);
- play(uS,true).then(()=>diag('Таймер идёт, звук разблокирован')).catch(e=>diag('Звук заблокирован: '+(e&&e.name||e)));
+ play(uS,false).then(()=>diag('Таймер идёт, звук разблокирован')).catch(e=>diag('Звук заблокирован: '+(e&&e.name||e)));
  tick();lock()}
 const back=()=>{tick();if(tEnd>Date.now()){if(!tI)tI=setInterval(tick,500);if(!wl)lock()}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)back()});window.addEventListener('pageshow',back);
